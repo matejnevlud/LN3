@@ -93,7 +93,7 @@ def apply_reference_color(target):
 
 # load all images in the folder, show them one by one using plot
 src_dir = '/Users/matejnevlud/Downloads/frame_20240510_122409.jpg/'
-src_dir = '/Users/matejnevlud/github/LN3/captures/14_05/'
+src_dir = '/captures/14_05/'
 # Get list of image files in the directory
 image_files = [f for f in os.listdir(src_dir) if f.endswith(('.png', '.jpg', '.jpeg'))]
 image_files.sort()

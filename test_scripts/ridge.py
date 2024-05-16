@@ -17,10 +17,10 @@ def original(image, **kwargs):
 
 #image = color.rgb2gray(data.retina())[300:700, 700:900]
 # load image from file using skimage
-src = '/Users/matejnevlud/github/LN3/hsv_test/13.jpeg'
+src = '/hsv_test/13.jpeg'
 
 # load 9-13.jpeg
-src = '/Users/matejnevlud/github/LN3/hsv_test/'
+src = '/hsv_test/'
 ridges_frames = []
 for i in range(9, 15):
     image = skimage.io.imread(src + str(i) + ".jpeg", as_gray=True)

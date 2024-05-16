@@ -94,14 +94,14 @@ def apply_reference_color(target):
 
 # load all images in the folder, show them one by one using plot
 src_dir = '/Users/matejnevlud/Downloads/frame_20240510_122409.jpg/'
-src_dir = '/Users/matejnevlud/github/LN3/captures/'
+src_dir = '/captures/'
 # Get list of image files in the directory
 image_files = [f for f in os.listdir(src_dir) if f.endswith(('.png', '.jpg', '.jpeg'))]
 image_files.sort()
 
 reference = cv2.imread('/Users/matejnevlud/github/LN3/captures/out_09_51.jpg')
-noodle = cv2.imread('/Users/matejnevlud/github/LN3/noodle.png')
-bin = cv2.imread('/Users/matejnevlud/github/LN3/bin.png')
+noodle = cv2.imread('/test_scripts/noodle.png')
+bin = cv2.imread('/test_scripts/bin.png')
 # Loop through each image and display it
 for image_file in image_files:
     # Open the image file

@@ -7,7 +7,7 @@ from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
 from matplotlib import colors
 
-src_dir = '/Users/matejnevlud/github/LN3/hsv_test/'
+src_dir = '/hsv_test/'
 
 frame9 = cv2.imread(src_dir + '13.jpeg')
 
@@ -15,7 +15,7 @@ frame9 = cv2.imread('/Users/matejnevlud/github/LN3/captures/20240515 /20240515_1
 img = cv2.imread('/Users/matejnevlud/github/LN3/captures/20240515 /20240515_124826.jpg')
 
 
-src_dir = '/Users/matejnevlud/github/LN3/captures/20240515 /'
+src_dir = '/captures/20240515 /'
 image_files = [f for f in os.listdir(src_dir) if f.endswith(('.png', '.jpg', '.jpeg'))]
 
 for image_file in image_files:
