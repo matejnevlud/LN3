@@ -9,7 +9,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import cv2
 
-from utils import whitebalance
+
+from utils import apply_reference_color, warp_conveyer_calculate
 
 
 def image_stats(image):
@@ -58,23 +59,60 @@ def color_transfer(source, target):
     return transfer
 
 
+def threshold_noodles(frame_bgr):
+    low_beige = (0, 20, 20)
+    high_beige = (80, 180, 255)
 
+    mask = cv2.inRange(cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2HSV), low_beige, high_beige)
+    kernel = np.ones((9, 9), np.uint8)
+    #mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+    mask = cv2.erode(mask, kernel, iterations=3)
+    mask = cv2.dilate(mask, kernel, iterations=3)
+    #mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+    return mask
+
+def contour_noodles(mask, debug_frame=None):
+    contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    mask = np.zeros(mask.shape, dtype=np.uint8)
+    for contour in contours:
+        hull = cv2.convexHull(contour)
+        cv2.drawContours(mask, [hull], 0, 255, -1)
+        if debug_frame is not None:
+            cv2.drawContours(debug_frame, [hull], 0, (0, 255, 255), 2)
+
+    return mask, debug_frame
 
 
 
 # load all images in the folder, show them one by one using plot
-src_dir = '/Users/matejnevlud/github/LN3/captures/'
+src_dir = '/Users/matejnevlud/github/LN3/captures/14_05'
 # Get list of image files in the directory
 image_files = [f for f in os.listdir(src_dir) if f.endswith(('.png', '.jpg', '.jpeg'))]
 image_files.sort()
 
-reference = cv2.imread('/Users/matejnevlud/github/LN3/captures/out_09_51.jpg')
+reference = cv2.imread('/Users/matejnevlud/github/LN3/captures/14_05/20240514_144830.jpg')
 # Loop through each image and display it
 for image_file in image_files:
     # Open the image file
     img_path = os.path.join(src_dir, image_file)
     img = cv2.imread(img_path)
-    hsv_image = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+
+    #
+
+    cv2.imshow('Origo', img)
+    #frame = color_transfer(reference, img)
+    region = warp_conveyer_calculate(img)
+    region = cv2.GaussianBlur(region, (11, 11), 0)
+    noodles_mask = threshold_noodles(region)
+    #? detect contours and draw convex hull
+    noodles_mask, region = contour_noodles(noodles_mask, region)
+
+    cv2.imshow('Transfer', region)
+    if cv2.waitKey(0) & 0xFF == ord('q'):
+        break
+
+    continue
+
 
     hsv_image_h = hsv_image[:, :, 0]
     reference_h = cv2.cvtColor(reference, cv2.COLOR_BGR2HSV)[:, :, 0]

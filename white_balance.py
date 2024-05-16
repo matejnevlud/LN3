@@ -93,12 +93,12 @@ def apply_reference_color(target):
 
 # load all images in the folder, show them one by one using plot
 src_dir = '/Users/matejnevlud/Downloads/frame_20240510_122409.jpg/'
-src_dir = '/Users/matejnevlud/github/LN3/captures/'
+src_dir = '/Users/matejnevlud/github/LN3/captures/14_05/'
 # Get list of image files in the directory
 image_files = [f for f in os.listdir(src_dir) if f.endswith(('.png', '.jpg', '.jpeg'))]
 image_files.sort()
 
-reference = cv2.imread('/Users/matejnevlud/github/LN3/captures/out_09_51.jpg')
+reference = cv2.imread('/Users/matejnevlud/github/LN3/captures/14_05/20240514_144830.jpg')
 # Loop through each image and display it
 for image_file in image_files:
     # Open the image file
@@ -108,6 +108,7 @@ for image_file in image_files:
 
 
     #img = color_transfer(reference, img)
+    img = color_transfer(reference, img)
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
     lab = cv2.cvtColor(img, cv2.COLOR_RGB2LAB)
@@ -115,6 +116,15 @@ for image_file in image_files:
 
     # only yellow part
     yellow = b > 128
+    yellow = yellow.astype(np.uint8) * 255
+
+    yellow = cv2.dilate(yellow, np.ones((5, 5), np.uint8), iterations=1)
+    yellow = cv2.erode(yellow, np.ones((5, 5), np.uint8), iterations=4)
+
+    # close the gaps
+    yellow = cv2.morphologyEx(yellow, cv2.MORPH_CLOSE, np.ones((31, 31), np.uint8))
+
+
 
 
 

@@ -6,33 +6,54 @@ import time
 
 CALC_TIME = True
 
-W = 1280
-H = 720
+W = 1920
+H = 1080
 
 STRIP_X_POSITION = 600
 HORIZONTAL_STRIP_Y_POSITION = 310
 
-DETECTION_RADIUS = 15
-DETECTION_COOLDOWN = 1.5
+DETECTION_RADIUS = 25
+DETECTION_COOLDOWN = 1.3
 
 
-def warp_conveyer(frame):
+def warp_conveyer_calculate(frame):
     t = cv2.getTickCount()
 
     pts1_1280x720_screenshot = np.float32([[161, 21], [1116, 29], [81, 584], [1224, 589]])
     pts1_1280x720 = np.float32([[166, 163], [1103, 171], [66, 641], [1230, 645]])
-
+    pts1_1920x1080 = np.float32([[261, 204], [1642, 213], [102, 931], [1845, 942]])
+    pts1_2688x1520 = np.float32([[326, 120], [2356, 147], [150, 1327], [2591, 1336]])
     # edit points for any frame.shape size
-    pts1 = np.float32(pts1_1280x720)
-    pts1[:, 0] = pts1[:, 0] * frame.shape[1] / W
-    pts1[:, 1] = pts1[:, 1] * frame.shape[0] / H
+    if frame.shape[1] == 1280 and frame.shape[0] == 720:
+        pts1 = pts1_1280x720
+    elif frame.shape[1] == 1920 and frame.shape[0] == 1080:
+        pts1 = pts1_1920x1080
+    elif frame.shape[1] == 2688 and frame.shape[0] == 1520:
+        pts1 = pts1_2688x1520
+    else:
+        pts1 = pts1_1280x720_screenshot
+
 
     pts1 = np.float32(pts1)
     pts2 = np.float32([[0, 0], [W, 0], [0, H], [W, H]])
     matrix = cv2.getPerspectiveTransform(pts1, pts2)
+
     frame = cv2.warpPerspective(frame, matrix, (W, H))
     if CALC_TIME:
-        print(f"Warp: {int((cv2.getTickCount() - t) / cv2.getTickFrequency() * 1000)} ms")
+        print(f"Warp DYN: {int((cv2.getTickCount() - t) / cv2.getTickFrequency() * 1000)} ms")
+    return frame
+
+
+def warp_conveyer(frame):
+    t = cv2.getTickCount()
+    matrix = np.array([[9.78465021e-01, 2.04699795e-01, -2.93686890e+02],
+                       [-1.15744296e-02, 1.35565506e+00, -3.28575630e+02],
+                       [-1.08687033e-05, 3.67648301e-04, 1.00000000e+00]])
+
+    # use,  INTER_NEAREST
+    frame = cv2.warpPerspective(frame, matrix, (W, H))
+    if CALC_TIME:
+        print(f"Warp STAT: {int((cv2.getTickCount() - t) / cv2.getTickFrequency() * 1000)} ms")
     return frame
 
 
@@ -56,6 +77,53 @@ def whitebalance(frame):
         print(f"WB: {int((cv2.getTickCount() - t) / cv2.getTickFrequency() * 1000)} ms")
     return (frame * 255).astype(np.uint8)
 
+
+
+
+def image_stats(image):
+    # compute the mean and standard deviation of each channel
+    (l, a, b) = cv2.split(image)
+    (lMean, lStd) = (l.mean(), l.std())
+    (aMean, aStd) = (a.mean(), a.std())
+    (bMean, bStd) = (b.mean(), b.std())
+    # return the color statistics
+    return (lMean, lStd, aMean, aStd, bMean, bStd)
+
+def color_transfer(source, target):
+    # convert the images from the RGB to L*ab* color space, being
+    # sure to utilizing the floating point data type (note: OpenCV
+    # expects floats to be 32-bit, so use that instead of 64-bit)
+    source = cv2.cvtColor(source, cv2.COLOR_BGR2LAB).astype("float32")
+    target = cv2.cvtColor(target, cv2.COLOR_BGR2LAB).astype("float32")
+    # compute color statistics for the source and target images
+    (lMeanSrc, lStdSrc, aMeanSrc, aStdSrc, bMeanSrc, bStdSrc) = image_stats(source)
+    (lMeanTar, lStdTar, aMeanTar, aStdTar, bMeanTar, bStdTar) = image_stats(target)
+    # subtract the means from the target image
+    (l, a, b) = cv2.split(target)
+    l -= lMeanTar
+    a -= aMeanTar
+    b -= bMeanTar
+    # scale by the standard deviations
+    l = (lStdTar / lStdSrc) * l
+    a = (aStdTar / aStdSrc) * a
+    b = (bStdTar / bStdSrc) * b
+    # add in the source mean
+    l += lMeanSrc
+    a += aMeanSrc
+    b += bMeanSrc
+    # clip the pixel intensities to [0, 255] if they fall outside
+    # this range
+    l = np.clip(l, 0, 255)
+    a = np.clip(a, 0, 255)
+    b = np.clip(b, 0, 255)
+    # merge the channels together and convert back to the RGB color
+    # space, being sure to utilize the 8-bit unsigned integer data
+    # type
+    transfer = cv2.merge([l, a, b])
+    transfer = cv2.cvtColor(transfer.astype("uint8"), cv2.COLOR_LAB2BGR)
+
+    # return the color transferred image
+    return transfer
 
 def apply_reference_color(target):
     target_lab = cv2.cvtColor(target, cv2.COLOR_BGR2LAB).astype(np.float32)
@@ -88,14 +156,11 @@ def apply_reference_color(target):
 
 
 def take_horizontal_strip(frame):
-    return frame[HORIZONTAL_STRIP_Y_POSITION:HORIZONTAL_STRIP_Y_POSITION + 100, 0:W]
+    return frame[HORIZONTAL_STRIP_Y_POSITION:HORIZONTAL_STRIP_Y_POSITION + 200, 0:W]
 
 
 def take_strip(frame):
     return frame[0:H, STRIP_X_POSITION:STRIP_X_POSITION + 100]
-
-
-
 
 
 def horizontal_gauss(frame):
