@@ -380,7 +380,7 @@ if __name__ == '__main__':
     mog2.setVarThreshold(16)
     mog2.setDetectShadows(False)
     white_pixels = 0
-    was_moving_deque = deque(maxlen=100)
+    was_moving_deque = deque(maxlen=200)
     is_moving = False
 
     def determine_movement(region):
@@ -406,7 +406,7 @@ if __name__ == '__main__':
 
     reference = cv2.imread('/Users/matejnevlud/github/LN3/captures/14_05/20240514_144830.jpg')
     src = 'rtsp://admin:Manzes1997@bicodigital.a.pinggy.link:18627/ISAPI/Streaming/Channels/101'
-    src = 'recordings/out_08_07.mp4'
+    #src = 'recordings/out_08_07.mp4'
 
     # determine if running on raspberry pi
     try:
