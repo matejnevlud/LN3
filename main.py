@@ -284,6 +284,9 @@ class Database:
         # create view, which will show sum of detections for each date
         self.cursor.execute('CREATE VIEW IF NOT EXISTS detections_by_date AS SELECT date, SUM(count) FROM detections GROUP BY date')
 
+        # create view for movements calculation
+        self.cursor.execute("CREATE VIEW IF NOT EXISTS movement_diff AS WITH previous_moving AS (SELECT id, timestamp, is_moving, LAG(timestamp) OVER (ORDER BY CAST(timestamp AS REAL)) AS prev_moving_timestamp FROM movement WHERE is_moving = 1), all_rows_with_prev_moving AS (SELECT m.id, m.timestamp AS stop_timestamp, m.is_moving, (SELECT timestamp FROM previous_moving pm WHERE CAST(pm.timestamp AS REAL) <= CAST(m.timestamp AS REAL) ORDER BY CAST(pm.timestamp AS REAL) DESC LIMIT 1) AS start_timestamp FROM movement m) SELECT id, start_timestamp, stop_timestamp, DATE(stop_timestamp, 'unixepoch') AS date, (CAST(stop_timestamp AS REAL) - CAST(start_timestamp AS REAL)) / 60.0 AS diff_in_minutes FROM all_rows_with_prev_moving WHERE is_moving = 0 ORDER BY CAST(stop_timestamp AS REAL);")
+
     def add_detection(self, region_id):
         # date in format YYYY-MM-DD
         current_date = date.today().isoformat()
