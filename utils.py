@@ -2,18 +2,8 @@ import cv2
 import numpy as np
 from skimage import img_as_ubyte
 from skimage.filters.ridges import sato
-import time
+from config import IS_DEBUG, W, H, STRIP_X_POSITION, HORIZONTAL_STRIP_Y_POSITION
 
-CALC_TIME = False
-
-W = 1920
-H = 1080
-
-STRIP_X_POSITION = 600
-HORIZONTAL_STRIP_Y_POSITION = 310
-
-DETECTION_RADIUS = 27
-DETECTION_COOLDOWN = 1.3
 
 
 class Utils:
@@ -41,8 +31,8 @@ class Utils:
         pts2 = np.float32([[0, 0], [W, 0], [0, H], [W, H]])
         matrix = cv2.getPerspectiveTransform(pts1, pts2)
 
-        frame = cv2.warpPerspective(frame, matrix, (W, H))
-        if CALC_TIME:
+        frame = cv2.warpPerspective(frame, matrix, (W, H), flags=cv2.INTER_NEAREST)
+        if IS_DEBUG:
             print(f"Warp DYN: {int((cv2.getTickCount() - t) / cv2.getTickFrequency() * 1000)} ms")
         return frame
 
@@ -59,9 +49,23 @@ class Utils:
 
         # use,  INTER_NEAREST
         frame = cv2.warpPerspective(frame, matrix, (W, H))
-        if CALC_TIME:
+        if IS_DEBUG:
             print(f"Warp STAT: {int((cv2.getTickCount() - t) / cv2.getTickFrequency() * 1000)} ms")
         return frame
+
+    @staticmethod
+    def warp_b(frame):
+        t = cv2.getTickCount()
+
+        pts1 = np.float32([[990, 253], [1752, 272],[952, 953], [1761, 972] ])
+        pts2 = np.float32([[0, 0], [W, 0], [0, H], [W, H]])
+        matrix = cv2.getPerspectiveTransform(pts1, pts2)
+
+        frame = cv2.warpPerspective(frame, matrix, (W, H), flags=cv2.INTER_NEAREST)
+        if IS_DEBUG:
+            print(f"Warp DYN: {int((cv2.getTickCount() - t) / cv2.getTickFrequency() * 1000)} ms")
+        return frame
+
 
     @staticmethod
     def whitebalance(frame):
@@ -80,10 +84,43 @@ class Utils:
         avg = measure_gray_world(frame)
         frame = frame / avg * 0.3
         frame = gamma_compress(frame)
-        if CALC_TIME:
+        if IS_DEBUG:
             print(f"WB: {int((cv2.getTickCount() - t) / cv2.getTickFrequency() * 1000)} ms")
         return (frame * 255).astype(np.uint8)
 
+    @staticmethod
+    def kelvin_to_rgb(kelvin):
+        kelvin = kelvin / 100.0
+        if kelvin <= 66:
+            r = 255
+            g = 99.4708025861 * np.log(kelvin) - 161.1195681661
+            b = 138.5177312231 * np.log(kelvin - 10) - 305.0447927307 if kelvin > 19 else 0
+        else:
+            r = 329.698727446 * ((kelvin - 60) ** -0.1332047592)
+            g = 288.1221695283 * ((kelvin - 60) ** -0.0755148492)
+            b = 255
+        return np.clip([r, g, b], 0, 255)
+
+    @staticmethod
+    def adjust_color_temperature(image, kelvin):
+        # Convert the input image to float
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        image = image.astype(np.float32) / 255.0
+
+        # Create a color temperature matrix based on the given Kelvin value
+        rgb_scale = Utils.kelvin_to_rgb(kelvin)
+        rgb_scale /= np.max(rgb_scale) # Normalize the RGB scale
+
+        # Apply the scale to the image
+        result = image * rgb_scale
+
+        # Ensure the result is within the valid range [0, 1]
+        result = np.clip(result, 0, 1)
+
+        # Convert the result back to uint8
+        result = (result * 255).astype(np.uint8)
+
+        return cv2.cvtColor(result, cv2.COLOR_RGB2BGR)
 
 
     @staticmethod
@@ -182,71 +219,6 @@ class Utils:
         ridges = sato(frame, black_ridges=True, sigmas=[9, 10, 11])
         _, ridges_treshold = cv2.threshold(img_as_ubyte(ridges), 0, 255, cv2.THRESH_OTSU)
         ridges_treshold = cv2.morphologyEx(ridges_treshold, cv2.MORPH_OPEN, np.ones((7, 31), dtype=np.uint8))
-        if CALC_TIME:
+        if IS_DEBUG:
             print(f"Ridges: {int((cv2.getTickCount() - t) / cv2.getTickFrequency() * 1000)} ms")
         return ridges_treshold
-
-
-class DetectionPoint:
-
-    #def static method
-    @staticmethod
-    def init_points(database):
-        detection_points = []
-        for i in range(0, 18):
-            x = int(W / 18 * i + (W / 18 / 2))
-            y = 50
-            detection_points.append(DetectionPoint(i, x, y, database))
-        return detection_points
-
-    def __init__(self, region_id, x, y, database):
-        self.counter = 0
-        self.x = x
-        self.y = y
-        self.database = database
-
-        self.region_id = region_id
-        self.is_detected = False
-        self.detected_time = 0
-        self.mask = None
-
-    def update(self, mask):
-        self.mask = mask
-        # test if circle with radius 10 is in beige mask with center in point
-        circle_mask = np.zeros(mask.shape, dtype=np.uint8)
-        cv2.circle(circle_mask, (self.x, self.y), DETECTION_RADIUS, 255, -1)
-        subtracted = cv2.subtract(circle_mask, mask)
-
-        # check if is already detected
-        if self.is_detected:
-            if time.time() - self.detected_time > DETECTION_COOLDOWN:
-                self.is_detected = False
-            return
-
-        # check if is detected
-        if cv2.countNonZero(subtracted) == 0:
-            self.is_detected = True
-            self.detected_time = time.time()
-            self.counter += 1
-            self.database.add_detection(self.region_id)
-        else:
-            self.is_detected = False
-
-    def get_count(self):
-        return self.counter
-
-    def draw(self, frame):
-
-        if self.is_detected:
-            cv2.circle(frame, (self.x, self.y), DETECTION_RADIUS, (0, 255, 0), -1)
-        else:
-            cv2.circle(frame, (self.x, self.y), DETECTION_RADIUS, (0, 0, 255), -1)
-
-        # draw count under the point
-        cv2.putText(frame, str(self.counter), (self.x - 15, self.y + 40), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-
-    def __str__(self):
-        return f"({self.x}, {self.y})"
-
-    def __repr__(self):
-        return self.__str__()

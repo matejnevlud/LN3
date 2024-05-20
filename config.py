@@ -1,0 +1,63 @@
+
+
+IS_DEBUG = True
+
+IS_B = False
+
+W = 1080 if IS_B else 1920
+H = 1080
+
+NUMBER_OF_REGIONS = 8 if IS_B else 18
+
+STRIP_X_POSITION = 600
+HORIZONTAL_STRIP_Y_POSITION = 310
+
+
+MOVING_COUNT_THRESHOLD = 200
+MOVING_MEAN_THRESHOLD = 0.8
+
+
+
+
+
+
+DETECTION_COOLDOWN = 1.8 if IS_B else 1.3
+
+DETECTION_BASIC_RADIUS = 27
+
+DETECTION_CIRCLE_X_OFFSETS = {
+    0: 0,
+    1: 0,
+    2: 0,
+    3: 0,
+    4: 5,
+    5: 5,
+    6: 7,
+    7: 10,
+}
+DETECTION_CIRCLE_PADDING = 10
+DETECTION_CIRCLE_SENSITIVITY = 0.70
+
+DETECTION_SQUARE_X_OFFSETS = {
+    0: 0,
+    1: 0,
+    2: 0,
+    3: 0,
+    4: 0,
+    5: 0,
+    6: 0,
+    7: 0,
+    8: 0,
+    9: 0,
+    10: 0,
+    11: 0,
+    12: 5,
+    13: 5,
+    14: 5,
+    15: 5,
+    16: 5,
+    17: 5
+}
+
+DETECTION_SQUARE_PADDING = 20
+DETECTION_SQUARE_SENSITIVITY = 0.80
