@@ -59,7 +59,7 @@ if __name__ == '__main__':
             #frame = cv2.resize(frame, (1920, 1080))
 
 
-            frame = Utils.warp_b(frame)
+            frame = Utils.warp_small_conveyer(frame)
             lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
             l_ch = lab[:, :, 0]
             gray = l_ch

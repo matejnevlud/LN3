@@ -1,14 +1,11 @@
-import concurrent
+import hashlib
+import uuid
 
 import cv2
 import numpy as np
-from matplotlib import pyplot as plt
-from skimage import img_as_ubyte
-from skimage.filters.ridges import sato
-from config import IS_DEBUG, W, H, STRIP_X_POSITION, HORIZONTAL_STRIP_Y_START, HORIZONTAL_STRIP_HEIGHT
 from scipy.signal import find_peaks
-import uuid
-import hashlib
+
+from config import H
 
 SPACES_STRIP_POSITION_X = 865 + 390
 SPACES_STRIP_WIDTH = 80
@@ -85,16 +82,8 @@ class SpaceCounter:
         l_channel = frame_lab[:, :, 0]
         strip = l_channel[0:frame_bgr.shape[0], self.strip_pos_x:self.strip_pos_x + self.strip_width]
 
-        # resize strip using factor
-        strip = cv2.resize(strip, (int(strip.shape[1] * self.strip_size_factor), int(strip.shape[0] * self.strip_size_factor)))
-        # use horizontal gauss kernel to smooth strip
-        strip = cv2.GaussianBlur(strip, (91, 41), 40)
-
-
-        # use kernel self.strip_width x 5, iterate over y and sum / avg all values, add to list
         kernel = np.ones((self.strip_kernel_height, 1), np.float32) / self.strip_kernel_height
         filtered_strip = cv2.filter2D(strip, -1, kernel, borderType=cv2.BORDER_CONSTANT)
-
         values = filtered_strip[:, 0]
 
         values = np.array(values)
@@ -105,7 +94,7 @@ class SpaceCounter:
 
         spaces, _ = find_peaks(values, distance=self.strip_distance, height=mean)
 
-        #for each peak, traverse left and right to find stem of peak
+        # for each peak, traverse left and right to find stem of peak
         spaces_obj = []
         for peak in spaces:
             stem = values[peak] - 3
@@ -124,23 +113,6 @@ class SpaceCounter:
         for i in range(0, len(spaces_obj) - 1):
             # apply factor to h
             spaces_obj[i].set_h(abs(spaces_obj[i + 1].y - spaces_obj[i].y) * self.strip_size_factor)
-
-
-        return spaces_obj
-
-        PADDING_OF_PEAK = 20
-
-        plt.clf()
-        plt.plot(values)
-        plt.plot(spaces, values[spaces], "x")
-        for peak in spaces_obj:
-            plt.plot(peak.y, values[peak.y], "o")
-
-        plt.axhline(y=mean, color='g', linestyle='--')
-        # auto show plot and resume
-
-        plt.draw()
-        plt.pause(0.001)
 
         return spaces_obj
 
@@ -170,7 +142,7 @@ class SpaceCounter:
                     break
 
             if not did_find_space:
-                #print(f"New space found: {new_space.uuid}")
+                # print(f"New space found: {new_space.uuid}")
                 pass
 
         self.last_spaces = new_spaces

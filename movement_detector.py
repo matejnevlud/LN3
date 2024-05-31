@@ -6,8 +6,6 @@ MOVING_COUNT_THRESHOLD = 200
 MOVING_MEAN_THRESHOLD = 0.8
 
 
-
-
 class MovementDetector:
     def __init__(self, db):
         self.bg_subtractor = cv2.bgsegm.createBackgroundSubtractorCNT(minPixelStability=1, useHistory=False, maxPixelStability=2, isParallel=True)
@@ -18,9 +16,9 @@ class MovementDetector:
 
     def determine_movement(self, frame):
         square = frame[frame.shape[0] // 2 - 50:frame.shape[0] // 2 + 50, frame.shape[1] // 2 - 50:frame.shape[1] // 2 + 50]
-        fgmask = self.bg_subtractor.apply(square)
+        foreground_mask = self.bg_subtractor.apply(square)
 
-        self.white_pixels = cv2.countNonZero(fgmask)
+        self.white_pixels = cv2.countNonZero(foreground_mask)
         self.was_moving_deque.append(self.white_pixels > MOVING_COUNT_THRESHOLD)
 
         # did change from moving to not moving or vice versa

@@ -1,7 +1,5 @@
 import sqlite3
-import time
 from datetime import date
-
 
 
 class Database:
@@ -14,10 +12,8 @@ class Database:
         self.cursor.execute('CREATE VIEW IF NOT EXISTS daily_sums AS SELECT date, SUM(empty) AS sum_empty, SUM(filled) AS sum_filled, SUM(empty + filled) AS sum_total FROM measurements GROUP BY date')
 
         self.cursor.execute('CREATE TABLE IF NOT EXISTS movement (id INTEGER PRIMARY KEY AUTOINCREMENT, is_moving INTEGER, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)')
-        self.cursor.execute("CREATE VIEW IF NOT EXISTS movement_diff AS WITH previous_moving AS (SELECT id, timestamp, is_moving, LAG(timestamp) OVER (ORDER BY timestamp) AS prev_moving_timestamp FROM movement WHERE is_moving = 1), all_rows_with_prev_moving AS (SELECT m.id, m.timestamp AS stop_timestamp, m.is_moving, (SELECT timestamp FROM previous_moving pm WHERE pm.timestamp <= m.timestamp ORDER BY pm.timestamp DESC LIMIT 1) AS start_timestamp FROM movement m) SELECT id, start_timestamp, stop_timestamp, DATE(stop_timestamp) AS date, (JULIANDAY(stop_timestamp) - JULIANDAY(start_timestamp)) * 1440.0 AS diff_in_minutes FROM all_rows_with_prev_moving WHERE is_moving = 0 ORDER BY stop_timestamp;")
-
-
-
+        self.cursor.execute(
+            "CREATE VIEW IF NOT EXISTS movement_diff AS WITH previous_moving AS (SELECT id, timestamp, is_moving, LAG(timestamp) OVER (ORDER BY timestamp) AS prev_moving_timestamp FROM movement WHERE is_moving = 1), all_rows_with_prev_moving AS (SELECT m.id, m.timestamp AS stop_timestamp, m.is_moving, (SELECT timestamp FROM previous_moving pm WHERE pm.timestamp <= m.timestamp ORDER BY pm.timestamp DESC LIMIT 1) AS start_timestamp FROM movement m) SELECT id, start_timestamp, stop_timestamp, DATE(stop_timestamp) AS date, (JULIANDAY(stop_timestamp) - JULIANDAY(start_timestamp)) * 1440.0 AS diff_in_minutes FROM all_rows_with_prev_moving WHERE is_moving = 0 ORDER BY stop_timestamp;")
 
         self.cursor.execute('CREATE TABLE IF NOT EXISTS detections (id INTEGER PRIMARY KEY AUTOINCREMENT, region_id INTEGER, date TEXT, count INTEGER)')
 
@@ -51,14 +47,10 @@ class Database:
         self.cursor.execute('INSERT INTO movement (is_moving) VALUES (?)', (_is_moving,))
         self.conn.commit()
 
-
     def add_measurement(self, empty, filled):
         current_date = date.today().isoformat()
         self.cursor.execute('INSERT INTO measurements (empty, filled, date) VALUES (?, ?, ?)', (empty, filled, current_date))
         self.conn.commit()
-
-
-
 
     def save_conveyer_measurements(self, conveyer):
         measurements = conveyer.get_avg_detection()
