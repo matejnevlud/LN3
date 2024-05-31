@@ -24,7 +24,7 @@ class NormalCamera(object):
 class ThreadedCamera(object):
     def __init__(self, src=0):
         self.capture = cv2.VideoCapture(src)
-        self.capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        self.capture.set(cv2.CAP_PROP_BUFFERSIZE, 0)
 
         self.FPS = 30
         self.SLEEP_SECONDS = 1 / (self.FPS * 2)

@@ -1,27 +1,28 @@
+import sched
 import time
-from collections import deque
+from multiprocessing import Process, Queue, Manager
+from threading import Thread
 
+import matplotlib.pyplot as plt
+import uvicorn
+from fastapi import FastAPI
+from matplotlib import colors
+from collections import deque
 import cv2
 import numpy as np
+from starlette.responses import StreamingResponse, Response
 
-from camera import ThreadedCamera
-from config import DETECTION_CIRCLE_X_OFFSETS, DETECTION_CIRCLE_RADIUS, DETECTION_SQUARE_X_OFFSETS
+from camera import ThreadedCamera, NormalCamera
 from database import Database
-from detection_point import detectCircleConveyer, detectSquareConveyer
+from detection_point import DetectionPoint, DetectionCircle, DetectionSquare, detectCircleConveyer, detectSquareConveyer
 from movement_detector import MovementDetector
+from server import run_uvicorn_process
 from space_counter import SpaceCounter
 from utils import Utils
+from config import IS_DEBUG, MOVING_COUNT_THRESHOLD, MOVING_MEAN_THRESHOLD, HORIZONTAL_STRIP_Y_START, IS_B, DETECTION_CIRCLE_X_OFFSETS, DETECTION_CIRCLE_RADIUS, DETECTION_SQUARE_X_OFFSETS
 
 
-def init_space_counter(IS_A):
-    if IS_A:
-        conveyer_counter = SpaceCounter(strip_pos_x=455, strip_width=80, strip_kernel_height=50, strip_size_factor=1, strip_distance=100)
-    else:
-        conveyer_counter = SpaceCounter(strip_pos_x=35, strip_width=25, strip_kernel_height=90, strip_size_factor=1, strip_distance=200)
-    return conveyer_counter
-
-
-def run_main_process(manager_memory=None, last_frames_queue=None, IS_A=False):
+def run_main_process_a(manager_memory=None, last_frames_queue=None):
     cv2.namedWindow('frame', cv2.WINDOW_NORMAL)
     cv2.setWindowProperty('frame', cv2.WND_PROP_TOPMOST, 1)
 
@@ -31,18 +32,19 @@ def run_main_process(manager_memory=None, last_frames_queue=None, IS_A=False):
         cv2.setWindowProperty('frame', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
         src = 'rtsp://admin:Manzes1997@192.168.1.64:554/ISAPI/Streaming/Channels/101'
     except ImportError:
+        src = 'recordings/small_normal.mp4'
         src = 'rtsp://admin:Manzes1997@bicodigital.a.pinggy.link:18627/ISAPI/Streaming/Channels/101'
-        src = 'recordings/out_09_53.mp4' if IS_A else 'recordings/small_opa.mp4'
+        src = 'recordings/out_09_53.mp4'
         pass
 
     threaded_camera = ThreadedCamera(src)
     db = Database()
 
     movement_detector = MovementDetector(db)
-    conveyer_counter = init_space_counter(IS_A)
+    conveyer_counter = SpaceCounter(strip_pos_x=455, strip_width=80, strip_kernel_height=50, strip_size_factor=1, strip_distance=100)
     last_measured_conveyer = None
 
-    DETECTION_LINE_Y = 820 if IS_A else 520
+    DETECTION_LINE_Y = 820
 
     frametime_deque = deque(maxlen=30)
     while True:
@@ -51,22 +53,16 @@ def run_main_process(manager_memory=None, last_frames_queue=None, IS_A=False):
 
             frame = threaded_camera.read_frame()
 
-            if frame is not None:
-                debug_frame = np.zeros((720, 1280 if IS_A else 720, 3), np.uint8)
-                debug_frame = cv2.putText(debug_frame, "NO VIDEO INPUT", (80, 80), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 0, 255), 2)
-                debug_frame = cv2.putText(debug_frame, time.strftime("%Y-%m-%d %H:%M:%S"), (80, 130), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 0, 255), 2)
+            if frame is None:
+                debug_frame = np.zeros((720, 1280, 3), np.uint8)
+                debug_frame = cv2.putText(debug_frame, "Missing frame " + time.strftime("%Y-%m-%d %H:%M:%S"), (80, 80), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 0, 255), 2)
                 cv2.imshow('frame', debug_frame)
+                cv2.waitKey(5)
                 Utils.add_frame_to_queue(debug_frame, last_frames_queue)
-                key = cv2.waitKey(1)
-                if key == ord('q'):
-                    break
                 continue
 
             # ? warp frame to get rid of perspective
-            frame = Utils.warp_conveyer_calculate(frame) if IS_A else Utils.warp_b(frame)
-
-            # ? remove top 150 px if B
-            frame = frame if IS_A else frame[150:, :]
+            frame = Utils.warp_conveyer_calculate(frame)
 
             # ? take square of regions height from the center of the region
             movement_detector.determine_movement(frame)
@@ -82,8 +78,10 @@ def run_main_process(manager_memory=None, last_frames_queue=None, IS_A=False):
                 # ? take horizontal strip of frame between conveyers, first conveyer is y start, second is y end, take full width
                 region = frame[conveyer_on_detection.y:conveyer_on_detection.y + conveyer_on_detection.h, :]
 
-                # ? adjust color temperature to 8000 if B
-                region = region if IS_A else Utils.adjust_color_temperature_8000_fast(region)
+                # region = Utils.adjust_color_temperature_8000_fast(region)
+
+                # ? apply blurring for better color detection
+                # region = apply_blur(region)
 
                 # ? create mask for noodles, close and open it to remove noise
                 noodles_mask = Utils.threshold_noodles(region)
@@ -91,7 +89,7 @@ def run_main_process(manager_memory=None, last_frames_queue=None, IS_A=False):
                 # ? detect contours and draw convex hull
                 noodles_mask, region = Utils.contour_noodles(noodles_mask, region)
 
-                detections = detectSquareConveyer(noodles_mask) if IS_A else detectCircleConveyer(noodles_mask, 8, conveyer_on_detection)
+                detections = detectSquareConveyer(noodles_mask)
                 conveyer_on_detection.add_detections(detections)
 
                 if last_measured_conveyer and last_measured_conveyer.uuid != conveyer_on_detection.uuid:
@@ -103,28 +101,25 @@ def run_main_process(manager_memory=None, last_frames_queue=None, IS_A=False):
                 # paste region onto frame at position 0, 0
                 frame[conveyer_on_detection.y:region.shape[0] + conveyer_on_detection.y, 0:region.shape[1]] = region
 
-            # ? draw measured conveyers on frame
-            for i in range(len(conveyers)):
-                conveyer = conveyers[i]
-                # draw rectangle around conveyer
-                cv2.line(frame, (0, conveyer.y), (frame.shape[1], conveyer.y), conveyer.get_color(), 20)
-                if conveyer.h:
-                    cv2.rectangle(frame, (0, conveyer.y), (frame.shape[1], conveyer.y + conveyer.h), conveyer.get_color(), 10)
+            try:
+                for i in range(len(conveyers)):
+                    conveyer = conveyers[i]
+                    # draw rectangle around conveyer
+                    cv2.line(frame, (0, conveyer.y), (frame.shape[1], conveyer.y), conveyer.get_color(), 20)
+                    if conveyer.h:
+                        cv2.rectangle(frame, (0, conveyer.y), (frame.shape[1], conveyer.y + conveyer.h), conveyer.get_color(), 10)
 
-                if len(conveyer.measurements) > 0:
-                    avg_detection = conveyer.get_avg_detection()
-                    for i in range(len(avg_detection)):
-                        if IS_A:
+                    if len(conveyer.measurements) > 0:
+                        avg_detection = conveyer.get_avg_detection()
+                        for i in range(len(avg_detection)):
                             x = frame.shape[1] // len(avg_detection) * i + frame.shape[1] // len(avg_detection) // 2 + DETECTION_SQUARE_X_OFFSETS[i]
                             y = conveyer.y + conveyer.h // 2
                             w = frame.shape[1] // 18 - 2 * 10
                             cv2.circle(frame, (x, y), 10, (0, 255, 0) if avg_detection[i] else (0, 0, 255), -1)
                             cv2.rectangle(frame, (x - w // 2, y - w // 2), (x + w // 2, y + w // 2), (0, 255, 0) if avg_detection[i] else (0, 0, 255), 3)
-                        else:
-                            x = frame.shape[1] // len(avg_detection) * i + frame.shape[1] // len(avg_detection) // 2 + DETECTION_CIRCLE_X_OFFSETS[i]
-                            y = conveyer.y + conveyer.h // 2
-                            cv2.circle(frame, (x, y), 10, (0, 255, 0) if avg_detection[i] else (0, 0, 255), -1)
-                            cv2.circle(frame, (x, y), DETECTION_CIRCLE_RADIUS, (0, 255, 0) if avg_detection[i] else (0, 0, 255), 4)
+
+            except Exception as e:
+                pass
 
             cv2.line(frame, (0, DETECTION_LINE_Y), (frame.shape[1], DETECTION_LINE_Y), (0, 0, 255) if True else (0, 255, 255), 10)
             frametime_deque.append(int((cv2.getTickCount() - t_main) / cv2.getTickFrequency() * 1000))
@@ -155,4 +150,4 @@ def run_main_process(manager_memory=None, last_frames_queue=None, IS_A=False):
 
 
 if __name__ == '__main__':
-    run_main_process()
+    run_main_process_a()
