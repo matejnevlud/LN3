@@ -16,7 +16,7 @@ from utils import Utils
 
 def init_space_counter(IS_A):
     if IS_A:
-        conveyer_counter = SpaceCounter(strip_pos_x=865 + 390, strip_width=80, strip_kernel_height=50, strip_size_factor=1, strip_distance=100)
+        conveyer_counter = SpaceCounter(strip_pos_x=865 + 730, strip_width=80, strip_kernel_height=50, strip_size_factor=1, strip_distance=100)
     else:
         conveyer_counter = SpaceCounter(strip_pos_x=35, strip_width=25, strip_kernel_height=90, strip_size_factor=1, strip_distance=200)
     return conveyer_counter
@@ -50,8 +50,10 @@ def draw_detections(frame, conveyers, IS_A):
                     cv2.circle(frame, (x, y), DETECTION_CIRCLE_RADIUS, (0, 255, 0) if avg_detection[i] else (0, 0, 255), 4)
 
 
-def draw_debug_info(frame, line_y, frametime_deque, movement_detector):
+def draw_debug_info(frame, line_y, frametime_deque, movement_detector, space_counter):
     cv2.line(frame, (0, line_y), (frame.shape[1], line_y), (0, 0, 255) if True else (0, 255, 255), 10)
+
+    cv2.line(frame, (space_counter.strip_pos_x, 0), (space_counter.strip_pos_x, frame.shape[0]), (255, 0, 0), 10)
 
     if len(frametime_deque) > 0:
         cv2.putText(frame, f"FPS: {int(1000 / np.mean(frametime_deque))}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
@@ -147,7 +149,7 @@ def run_main_process(manager_memory=None, last_frames_queue=None, IS_A=True):
             draw_detections(frame, conveyers, IS_A)
 
             # ? draw debug info
-            draw_debug_info(frame, detection_line_y, frametime_deque, movement_detector)
+            draw_debug_info(frame, detection_line_y, frametime_deque, movement_detector, conveyer_counter)
 
             # ? add frame to multiprocessing queue
             Utils.add_frame_to_queue(frame, last_frames_queue)
