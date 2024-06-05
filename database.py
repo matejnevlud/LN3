@@ -1,5 +1,6 @@
 import sqlite3
-from datetime import date
+import time
+from datetime import date, datetime, timedelta
 
 
 class Database:
@@ -22,35 +23,61 @@ class Database:
         # create view, which will show sum of detections for each date
         self.cursor.execute('CREATE VIEW IF NOT EXISTS detections_by_date AS SELECT date, SUM(count) FROM detections GROUP BY date')
 
-        # create view for movements calculation
+        self.no_empty = 0
+        self.no_filled = 0
+        self.date = None
+        self.time_of_movement = None
 
-    def add_detection(self, region_id):
-        # date in format YYYY-MM-DD
-        current_date = date.today().isoformat()
-        self.cursor.execute('SELECT count FROM detections WHERE region_id = ? AND date = ?', (region_id, current_date))
-        row = self.cursor.fetchone()
-        if row is None:
-            self.cursor.execute('INSERT INTO detections (region_id, date, count) VALUES (?, ?, 1)', (region_id, current_date))
-        else:
-            self.cursor.execute('UPDATE detections SET count = count + 1 WHERE region_id = ? AND date = ?', (region_id, current_date))
-        self.conn.commit()
-
-    def get_detections(self):
-        self.cursor.execute('SELECT * FROM detections')
-        return self.cursor.fetchall()
-
-    def get_detections_by_date(self, date_iso):
-        self.cursor.execute('SELECT * FROM detections WHERE date = ?', (date_iso,))
-        return self.cursor.fetchall()
+        self.is_moving = False
+        self.last_movement_change = time.time()
 
     def add_movement(self, _is_moving):
+        current_datetime = time.time()
         self.cursor.execute('INSERT INTO movement (is_moving) VALUES (?)', (_is_moving,))
         self.conn.commit()
+
+        if self.last_movement_change is None:
+            self.last_movement_change = current_datetime
+            self.is_moving = _is_moving
+        elif self.is_moving != _is_moving:
+            self.is_moving = _is_moving
+            self.last_movement_change = current_datetime
+
+    def get_last_movement(self):
+        self.cursor.execute('SELECT is_moving, timestamp FROM movement ORDER BY timestamp DESC LIMIT 1')
+        row = self.cursor.fetchone()
+        if row is not None:
+            self.is_moving = row[0] == 1
+            # row[1] is in format 'YYYY-MM-DD HH:MM:SS' parse to time object, time is in UTC
+
+            self.last_movement_change = time.mktime((datetime.strptime(row[1], '%Y-%m-%d %H:%M:%S') - timedelta(hours=int(-2))).timetuple())
+        return self.is_moving
+
+
 
     def add_measurement(self, empty, filled):
         current_date = date.today().isoformat()
         self.cursor.execute('INSERT INTO measurements (empty, filled, date) VALUES (?, ?, ?)', (empty, filled, current_date))
         self.conn.commit()
+
+        if self.date is None:
+            self.date = current_date
+            # try to get last measurements from database
+            self.cursor.execute('SELECT sum_empty, sum_filled FROM daily_sums WHERE date = ?', (current_date,))
+            row = self.cursor.fetchone()
+            if row is not None:
+                self.no_empty = row[0]
+                self.no_filled = row[1]
+            else:
+                self.no_empty = empty
+                self.no_filled = filled
+        elif self.date == current_date:
+            self.no_empty += empty
+            self.no_filled += filled
+        elif self.date != current_date:
+            self.date = current_date
+            self.no_empty = empty
+            self.no_filled = filled
 
     def save_conveyer_measurements(self, conveyer):
         measurements = conveyer.get_avg_detection()

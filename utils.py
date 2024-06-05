@@ -155,6 +155,6 @@ class Utils:
     def add_frame_to_queue(frame, q):
 
         frame = cv2.resize(frame, (frame.shape[1] // 2, frame.shape[0] // 2))  # resize to 50% of original
-        jpeg_50_quality = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 50])[1].tobytes()
+        jpeg_50_quality = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])[1].tobytes()
         if q and not q.full():
             q.put(jpeg_50_quality)

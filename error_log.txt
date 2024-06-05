@@ -1,0 +1,12 @@
+Traceback (most recent call last):
+  File "/Users/matejnevlud/github/LN3/main.py", line 167, in run_main_process
+    draw_debug_info(frame, detection_line_y, frametime_deque, movement_detector, conveyer_counter, db)
+  File "/Users/matejnevlud/github/LN3/main.py", line 70, in draw_debug_info
+    delta_movement = time.time() - movement_detector.last_movement_change
+AttributeError: 'MovementDetector' object has no attribute 'last_movement_change'
+Traceback (most recent call last):
+  File "/Users/matejnevlud/github/LN3/main.py", line 167, in run_main_process
+    draw_debug_info(frame, detection_line_y, frametime_deque, movement_detector, conveyer_counter, db)
+  File "/Users/matejnevlud/github/LN3/main.py", line 70, in draw_debug_info
+    delta_movement = time.time() - db.last_movement_change
+TypeError: unsupported operand type(s) for -: 'float' and 'NoneType'

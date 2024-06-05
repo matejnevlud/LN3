@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 
 from camera import ThreadedCamera
-from config import DETECTION_CIRCLE_X_OFFSETS, DETECTION_CIRCLE_RADIUS, DETECTION_SQUARE_X_OFFSETS
+from config import DETECTION_CIRCLE_X_OFFSETS, DETECTION_CIRCLE_RADIUS, DETECTION_SQUARE_X_OFFSETS, DETECTION_SQUARE_PADDING_Y_TOP, W, DETECTION_SQUARE_PADDING, DETECTION_SQUARE_PADDING_Y_BOTTOM
 from database import Database
 from detection_point import detect_small_conveyer, detect_big_conveyer
 from movement_detector import MovementDetector
@@ -26,23 +26,28 @@ def draw_detections(frame, conveyers, IS_A):
     for i in range(len(conveyers)):
         conveyer = conveyers[i]
         # draw rectangle around conveyer
-        cv2.line(frame, (0, conveyer.y), (frame.shape[1], conveyer.y), conveyer.get_color(), 20)
+        cv2.line(frame, (0, conveyer.y), (frame.shape[1], conveyer.y), conveyer.get_color(), 10)
 
         if conveyer.h is None:
             cv2.putText(frame, "NEW CONVEYER", (10, conveyer.y + 50), cv2.FONT_HERSHEY_SIMPLEX, 1, conveyer.get_color(), 2)
             continue
 
-        cv2.rectangle(frame, (0, conveyer.y), (frame.shape[1], conveyer.y + conveyer.h), conveyer.get_color(), 10)
+        cv2.rectangle(frame, (0, conveyer.y), (frame.shape[1], conveyer.y + conveyer.h), conveyer.get_color(), 5)
 
         if len(conveyer.measurements) > 0:
             avg_detection = conveyer.get_avg_detection()
             for i in range(len(avg_detection)):
                 if IS_A:
-                    x = frame.shape[1] // len(avg_detection) * i + frame.shape[1] // len(avg_detection) // 2 + DETECTION_SQUARE_X_OFFSETS[i]
-                    y = conveyer.y + conveyer.h // 2
-                    w = frame.shape[1] // 18 - 2 * 10
-                    cv2.circle(frame, (x, y), 10, (0, 255, 0) if avg_detection[i] else (0, 0, 255), -1)
-                    cv2.rectangle(frame, (x - w // 2, y - w // 2), (x + w // 2, y + w // 2), (0, 255, 0) if avg_detection[i] else (0, 0, 255), 3)
+                    x = int(W / 18 * i) + DETECTION_SQUARE_PADDING + DETECTION_SQUARE_X_OFFSETS[i]
+                    y = conveyer.y + DETECTION_SQUARE_PADDING_Y_TOP
+                    w = W // 18 - 2 * DETECTION_SQUARE_PADDING
+                    h = conveyer.h - DETECTION_SQUARE_PADDING_Y_TOP - DETECTION_SQUARE_PADDING_Y_BOTTOM
+                    cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0) if avg_detection[i] else (0, 0, 255), 3)
+                    cv2.circle(frame, (x + w // 2, y + h // 2), 10, (0, 255, 0) if avg_detection[i] else (0, 0, 255), -1)
+
+
+                    #cv2.circle(frame, (x, y), 10, (0, 255, 0) if avg_detection[i] else (0, 0, 255), -1)
+                    #cv2.rectangle(frame, (x - w // 2, y - w // 2), (x + w // 2, y + w // 2), (0, 255, 0) if avg_detection[i] else (0, 0, 255), 3)
                 else:
                     x = frame.shape[1] // len(avg_detection) * i + frame.shape[1] // len(avg_detection) // 2 + DETECTION_CIRCLE_X_OFFSETS[i]
                     y = conveyer.y + conveyer.h // 2
@@ -50,14 +55,38 @@ def draw_detections(frame, conveyers, IS_A):
                     cv2.circle(frame, (x, y), DETECTION_CIRCLE_RADIUS, (0, 255, 0) if avg_detection[i] else (0, 0, 255), 4)
 
 
-def draw_debug_info(frame, line_y, frametime_deque, movement_detector, space_counter):
+logo = cv2.imread('logo.jpg', cv2.IMREAD_UNCHANGED)
+logo = cv2.resize(logo, (logo.shape[1] * 85 // logo.shape[0], 85))
+def draw_debug_info(frame, line_y, frametime_deque, movement_detector, space_counter, db):
     cv2.line(frame, (0, line_y), (frame.shape[1], line_y), (0, 0, 255) if True else (0, 255, 255), 10)
-
     cv2.line(frame, (space_counter.strip_pos_x, 0), (space_counter.strip_pos_x, frame.shape[0]), (255, 0, 0), 10)
 
+    cv2.rectangle(frame, (0, 0), (frame.shape[1], 85), (0, 0, 0), -1)
+
     if len(frametime_deque) > 0:
-        cv2.putText(frame, f"FPS: {int(1000 / np.mean(frametime_deque))}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-    cv2.putText(frame, f"IS MOVING {movement_detector.white_pixels}" if movement_detector.is_moving else f"NOT MOVING {movement_detector.white_pixels}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0) if movement_detector.is_moving else (0, 0, 255), 2)
+        cv2.putText(frame, f"FPS: {int(1000 / np.mean(frametime_deque))}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+
+    delta_movement = '00:00:00'
+    if db.last_movement_change is not None:
+        delta_movement = time.strftime("%H:%M:%S", time.gmtime(time.time() - db.last_movement_change))
+    cv2.putText(frame, f"V POHYBU {delta_movement}" if movement_detector.is_moving else f"STOJI {delta_movement}", (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0) if movement_detector.is_moving else (0, 0, 255), 2)
+
+    cv2.putText(frame, f"PRAZDNE: {db.no_empty}", (400, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+    cv2.putText(frame, f"NUDLE: {db.no_filled}", (400, 70), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+
+
+
+
+
+    #? BOTTOM STRIP
+    cv2.rectangle(frame, (0, frame.shape[0] - 85), (frame.shape[1], frame.shape[0]), (0, 0, 0), -1)
+    cv2.putText(frame, f"{db.date}", (frame.shape[1] - 380, frame.shape[0] - 35), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+    frame[frame.shape[0] - logo.shape[0]:, frame.shape[1] - logo.shape[1]:] = logo
+
+
+    frame[0:logo.shape[0], frame.shape[1] - logo.shape[1]:] = logo
+
+
 
 
 def run_main_process(manager_memory=None, last_frames_queue=None, IS_A=True):
@@ -149,7 +178,7 @@ def run_main_process(manager_memory=None, last_frames_queue=None, IS_A=True):
             draw_detections(frame, conveyers, IS_A)
 
             # ? draw debug info
-            draw_debug_info(frame, detection_line_y, frametime_deque, movement_detector, conveyer_counter)
+            draw_debug_info(frame, detection_line_y, frametime_deque, movement_detector, conveyer_counter, db)
 
             # ? add frame to multiprocessing queue
             Utils.add_frame_to_queue(frame, last_frames_queue)

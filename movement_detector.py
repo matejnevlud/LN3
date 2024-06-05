@@ -11,7 +11,10 @@ class MovementDetector:
         self.bg_subtractor = cv2.bgsegm.createBackgroundSubtractorCNT(minPixelStability=1, useHistory=False, maxPixelStability=2, isParallel=True)
         self.white_pixels = 0
         self.was_moving_deque = deque(maxlen=200)
-        self.is_moving = False
+        self.is_moving = db.get_last_movement()
+        if self.is_moving is True:
+            self.was_moving_deque.extend([True] * 200)
+
         self.db = db
 
     def determine_movement(self, frame):
